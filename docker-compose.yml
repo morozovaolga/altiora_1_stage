@@ -1,0 +1,35 @@
+# API с LibreOffice внутри образа: docker compose up --build api → http://localhost:8000
+# Локальный «python -m uvicorn» на Windows — без контейнера; LibreOffice из Dockerfile на хост не попадает.
+
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: altiora-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Разработка: весь репозиторий в контейнере (включая локальные data/ — не для «чистой» поставки).
+      # Прод: образ без data/ + при необходимости отдельный volume только на data/ или tmpfs.
+      - .:/app
+      # Сохраняем кеш скачанных ML-моделей (чтобы не качать заново)
+      - altiora-hf-cache:/root/.cache/huggingface
+    # Переопределяем команду запуска, добавляя флаг --reload
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  api-docling:
+    build: .
+    profiles: ["docling"]
+    container_name: altiora-api-docling
+    ports:
+      - "8001:8000"
+    volumes:
+      - .:/app
+      - altiora-hf-cache:/root/.cache/huggingface
+    environment:
+      - ALTIORA_DEFAULT_PARSER=docling
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  altiora-hf-cache:

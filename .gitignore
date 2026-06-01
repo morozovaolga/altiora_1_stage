@@ -1,0 +1,36 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime / local artifacts (not for delivery)
+data/ingested/*
+data/chunks_structural/*
+data/api_uploads/*
+data/chunks/*
+!data/ingested/.gitkeep
+!data/chunks_structural/.gitkeep
+!data/api_uploads/.gitkeep
+!data/chunks/.gitkeep
+
+inventory*.xlsx
+archive/
+
+.env
+.env.*
+*.pem
+*.key
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Delivery zip output
+dist/
+altiora_1_stage_delivery.zip

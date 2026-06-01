@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <title>Altiora — распознавание документов</title>
+    <script src="/static/vendor/marked.min.js"></script>
+    <script src="/static/vendor/purify.min.js"></script>
+    <style>
+      :root {
+        --gray-50: #f9fafb;
+        --gray-100: #f3f4f6;
+        --gray-200: #e5e7eb;
+        --gray-300: #d1d5db;
+        --gray-400: #9ca3af;
+        --gray-500: #6b7280;
+        --gray-600: #4b5563;
+        --gray-700: #374151;
+        --gray-900: #111827;
+        --blue-50: #eff6ff;
+        --blue-100: #dbeafe;
+        --blue-600: #2563eb;
+        --blue-700: #1d4ed8;
+        --surface: #ffffff;
+        --border: #e5e7eb;
+        --text: #111827;
+        --text-muted: #6b7280;
+        --formula-bg: #f5f3ff;
+        --formula-border: #c4b9f5;
+        --table-head: #f3f4f6;
+        --badge-formula: #7c3aed;
+        --badge-table: #0369a1;
+        --badge-header: #111827;
+        --badge-list: #065f46;
+        --badge-other: #92400e;
+        --badge-paragraph: #4b5563;
+        --content-col: 896px;
+        --mono: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+        --sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: var(--sans);
+        background: var(--gray-100);
+        color: var(--text);
+        font-size: 15px;
+        line-height: 1.5;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      a { color: var(--blue-600); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+
+      .app-header {
+        background: var(--surface);
+        border-bottom: 1px solid var(--gray-200);
+        padding: 16px 24px;
+        flex-shrink: 0;
+      }
+      .app-header-inner { max-width: var(--content-col); margin: 0 auto; }
+      .app-header h1 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--gray-900);
+      }
+      .app-header .subtitle {
+        margin: 4px 0 0;
+        font-size: 0.875rem;
+        color: var(--gray-600);
+      }
+
+      .processing-bar {
+        background: var(--surface);
+        border-bottom: 1px solid var(--gray-200);
+        padding: 16px 24px;
+        flex-shrink: 0;
+      }
+      .main-column {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .processing-inner {
+        max-width: var(--content-col);
+        margin: 0 auto;
+        width: 100%;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+      .processing-inner .proc-actions {
+        justify-content: flex-start;
+      }
+      .file-row { display: none; align-items: center; gap: 12px; }
+      .file-row.visible { display: flex; }
+      .file-icon {
+        width: 40px; height: 40px;
+        background: var(--blue-100);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--blue-600);
+      }
+      .file-meta .name { font-weight: 500; color: var(--gray-900); margin: 0; }
+      .file-meta .status { font-size: 0.8125rem; color: var(--gray-500); margin: 0; }
+      .proc-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      .progress-wrap {
+        display: none;
+        align-items: center;
+        gap: 10px;
+      }
+      .progress-wrap.visible { display: flex; }
+      .progress-bar {
+        width: 192px;
+        height: 8px;
+        background: var(--gray-200);
+        border-radius: 999px;
+        overflow: hidden;
+      }
+      .progress-fill {
+        height: 100%;
+        background: var(--blue-600);
+        width: 0%;
+        transition: width .25s;
+      }
+
+      button, .btn {
+        font-family: var(--sans);
+        font-size: 0.875rem;
+        font-weight: 500;
+        padding: 8px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        border: 1px solid transparent;
+        transition: background .15s, border-color .15s;
+      }
+      .btn-blue {
+        background: var(--blue-600);
+        color: #fff;
+        border-color: var(--blue-600);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .btn-blue:hover:not(:disabled) { background: var(--blue-700); }
+      .btn-blue:disabled { background: var(--gray-300); cursor: not-allowed; }
+      .btn-outline {
+        background: var(--surface);
+        color: var(--gray-700);
+        border-color: var(--gray-300);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .btn-outline:hover { background: var(--gray-50); }
+      .btn-danger-outline {
+        background: var(--surface);
+        color: #b91c1c;
+        border-color: #fecaca;
+      }
+      .btn-danger-outline:hover { background: #fef2f2; }
+
+      .app-columns {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .toolbar-strip {
+        flex-shrink: 0;
+        background: var(--gray-50);
+        border-bottom: 1px solid var(--gray-200);
+        padding: 12px 24px 8px;
+      }
+      .toolbar-inner {
+        max-width: var(--content-col);
+        margin: 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+      .toolbar-strip .doc-list:not(:empty) {
+        max-width: var(--content-col);
+        margin: 10px auto 0;
+        padding-top: 10px;
+        border-top: 1px solid var(--gray-200);
+      }
+      .main {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 24px;
+      }
+      .main-inner {
+        max-width: var(--content-col);
+        margin: 0 auto;
+        width: 100%;
+        box-sizing: border-box;
+      }
+      #uploadForm { width: 100%; }
+
+      .parser-mode-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 14px;
+        margin-top: 16px;
+        padding: 12px 14px;
+        background: var(--surface);
+        border: 1px solid var(--gray-200);
+        border-radius: 8px;
+      }
+      .parser-mode-row label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--gray-700);
+        margin: 0;
+      }
+      .parser-mode-row select {
+        font-family: var(--sans);
+        font-size: 0.875rem;
+        padding: 8px 12px;
+        min-width: 220px;
+        border: 1px solid var(--gray-300);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--gray-900);
+        cursor: pointer;
+      }
+      .parser-mode-row select:focus {
+        outline: none;
+        border-color: var(--blue-600);
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+      }
+      .parser-mode-row .hint-inline {
+        font-size: 0.8125rem;
+        color: var(--gray-500);
+        margin: 0;
+        flex: 1 1 200px;
+      }
+
+      .upload-zone {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        border: 2px dashed var(--gray-300);
+        border-radius: 8px;
+        padding: 48px 24px;
+        text-align: center;
+        background: var(--gray-50);
+        cursor: pointer;
+        transition: border-color .15s, background .15s;
+      }
+      .upload-zone:hover { border-color: var(--blue-600); background: var(--blue-50); }
+      .upload-zone .upload-icon { width: 48px; height: 48px; margin: 0 auto 16px; color: var(--gray-400); }
+      .upload-zone .hint { color: var(--gray-600); margin: 0 0 8px; }
+      .upload-zone .hint-small { font-size: 0.8125rem; color: var(--gray-400); margin: 0; }
+      .upload-zone input[type="file"] { display: none; }
+
+      .search-wrap { position: relative; margin-bottom: 24px; }
+      .search-wrap svg {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 20px;
+        height: 20px;
+        color: var(--gray-400);
+        pointer-events: none;
+      }
+      .search-wrap input {
+        width: 100%;
+        padding: 12px 16px 12px 40px;
+        border: 1px solid var(--gray-300);
+        border-radius: 8px;
+        font-size: 0.9375rem;
+      }
+      .search-wrap input:focus {
+        outline: none;
+        border-color: var(--blue-600);
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+      }
+
+      .doc-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+      .btn-chip {
+        background: var(--surface);
+        color: var(--gray-700);
+        border: 1px solid var(--gray-300);
+        font-size: 0.75rem;
+        padding: 6px 11px;
+      }
+      .btn-chip:hover { border-color: var(--gray-400); }
+      .btn-chip.api { border-color: #7dd3fc; background: #f0f9ff; color: #0369a1; }
+
+      #loading { display: none; }
+      #loading.visible {
+        display: block;
+        width: 100%;
+        box-sizing: border-box;
+        margin: 16px 0;
+        padding: 12px 16px;
+        background: var(--surface);
+        border: 1px solid var(--gray-200);
+        border-radius: 8px;
+        font-size: 0.8125rem;
+        color: var(--gray-600);
+      }
+
+      .result-title {
+        font-family: var(--sans);
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin: 0 0 14px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+      }
+      .route-pill {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        border-radius: 3px;
+        background: var(--table-head);
+        border: 1px solid var(--border);
+        color: var(--text-muted);
+      }
+
+      details.chunk {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        margin-bottom: 10px;
+        overflow: hidden;
+        transition: box-shadow .15s;
+      }
+      details.chunk:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
+      details.chunk.block-type-formula { border-color: var(--formula-border); }
+
+      summary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-bottom: 1px solid var(--border);
+        background: var(--gray-50);
+        font-family: var(--mono);
+        font-size: 11px;
+        cursor: pointer;
+        list-style: none;
+      }
+      summary::-webkit-details-marker { display: none; }
+      summary .sum-title { font-family: var(--sans); font-size: 14px; font-weight: 600; color: var(--text); }
+      summary .sum-meta { margin-left: auto; font-weight: normal; color: var(--text-muted); font-size: 11px; }
+
+      .content {
+        padding: 14px 16px;
+        font-size: 14px;
+        background: var(--surface);
+        overflow-x: auto;
+      }
+      .content p { margin: 0 0 8px; }
+      .content p:last-child { margin-bottom: 0; }
+
+      .md-table-wrap.md-markdown-tables {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        margin: 4px 0 10px;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .md-markdown-tables > p:first-child { margin-top: 0; }
+      .md-markdown-tables table {
+        width: max-content;
+        max-width: none;
+        min-width: min(100%, 360px);
+        border-collapse: collapse;
+        margin: 0.5em 0;
+        font-size: 11px;
+        line-height: 1.35;
+      }
+      .md-markdown-tables thead th,
+      .md-markdown-tables tbody td {
+        border: 1px solid var(--border);
+        padding: 6px 8px;
+        vertical-align: middle;
+        hyphens: auto;
+        word-break: break-word;
+      }
+      .md-markdown-tables thead th {
+        background: var(--table-head);
+        font-weight: 600;
+      }
+      .md-markdown-tables tbody tr:nth-child(even) td { background: #fafaf8; }
+      .md-markdown-tables .md-table-band {
+        background: #f9fafb;
+        font-weight: normal;
+        text-align: left;
+        padding: 8px 10px 8px 12px;
+        margin: 8px 0 0;
+        font-size: 13px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+        border-left: 3px solid var(--gray-300);
+        color: var(--text);
+      }
+      .md-markdown-tables .md-fallback-pre {
+        font-family: var(--mono);
+        font-size: 11px;
+        white-space: pre-wrap;
+        margin: 0;
+      }
+
+      .badge {
+        padding: 2px 7px;
+        border-radius: 3px;
+        font-size: 9px;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+        font-weight: 600;
+        color: #fff;
+        flex-shrink: 0;
+      }
+      .badge.header { background: var(--badge-header); }
+      .badge.table { background: var(--badge-table); }
+      .badge.list { background: var(--badge-list); }
+      .badge.paragraph { background: var(--badge-paragraph); }
+      .badge.formula { background: var(--badge-formula); }
+      .badge.other { background: var(--badge-other); }
+
+      .quality-meta { font-size: 11px; color: var(--text-muted); font-weight: normal; }
+
+      .formula-plain {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: #444;
+        background: #ede8ff;
+        border: 1px dashed var(--formula-border);
+        border-radius: 4px;
+        padding: 12px 14px;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        text-align: center;
+        margin: 10px 0;
+      }
+      .formula-vars-box {
+        margin-top: 10px;
+        font-style: italic;
+        color: var(--text-muted);
+        font-size: 13px;
+        font-family: var(--sans);
+      }
+      .entities-box {
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+      .entities-label {
+        font-family: var(--mono);
+        font-size: 9px;
+        text-transform: uppercase;
+        letter-spacing: .1em;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+      }
+      .entity-tag {
+        display: inline-block;
+        font-size: 10px;
+        font-family: var(--mono);
+        padding: 2px 7px;
+        margin: 2px 4px 2px 0;
+        border-radius: 3px;
+        background: #e5e7eb;
+        color: #374151;
+        border: 1px solid #d1d5db;
+      }
+      .entity-tag .etype { color: #6b7280; }
+
+      .chunk-inline-img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 8px 0;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: #fff;
+      }
+      /* Формулы-картинки: не на всю ширину контейнера — остаётся горизонтальный запас для номеров (2.n) в той же строке / рядом */
+      details.chunk.block-type-formula .content .chunk-inline-img,
+      details.chunk.block-type-formula .content img {
+        max-width: 80%;
+        width: auto;
+        height: auto;
+      }
+
+      .msg-error {
+        text-align: center;
+        padding: 16px 18px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        color: #b91c1c;
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .empty-note { color: var(--text-muted); font-size: 14px; }
+
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+    </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="app-header-inner">
+      <h1>Распознавание и разметка документов</h1>
+      <p class="subtitle">Автоматическая обработка, чанки и качество (Altiora ETL)</p>
+    </div>
+  </header>
+
+  <div class="app-columns">
+    <div class="main-column">
+      <div class="toolbar-strip">
+        <div class="toolbar-inner">
+          <button type="button" class="btn btn-blue" id="loadDocsBtn">
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/></svg>
+            Открыть из базы
+          </button>
+          <button type="button" class="btn btn-outline" id="exportJsonBtn">Экспорт JSON</button>
+          <button type="button" class="btn btn-danger-outline" id="cleanupBtn">Очистить тестовую базу</button>
+        </div>
+        <div id="docList" class="doc-list"></div>
+        <span id="statChunks" hidden>0</span>
+        <span id="statRoute" hidden>—</span>
+      </div>
+
+    <div class="processing-bar">
+    <div class="processing-inner">
+      <div class="proc-actions">
+        <div class="progress-wrap" id="progressWrap">
+          <span id="progressPct" style="font-size:0.8125rem;color:#4b5563;">0%</span>
+          <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        </div>
+        <button type="submit" form="uploadForm" class="btn btn-blue" id="btnRecognize" disabled>
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          Распознать
+        </button>
+        <button type="button" class="btn btn-outline" id="btnResetForm">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Сброс
+        </button>
+      </div>
+      <div class="file-row" id="fileRow">
+        <div class="file-icon" aria-hidden="true">
+          <svg width="22" height="22" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <div class="file-meta">
+          <p class="name" id="fileNameDisplay">—</p>
+          <p class="status" id="fileStatus">Выберите файл в области ниже</p>
+        </div>
+      </div>
+    </div>
+    </div>
+
+    <main class="main">
+      <div class="main-inner">
+        <form id="uploadForm">
+          <label class="upload-zone" for="fileInput">
+            <div class="upload-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            </div>
+            <p class="hint">Перетащите файл сюда или нажмите для выбора</p>
+            <p class="hint-small">PDF, DOC/DOCX, XLS/XLSX, RTF, TXT, CSV, PNG, JPG — YOLO+OCR / нативные таблицы</p>
+            <input type="file" id="fileInput" name="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.rtf,.txt,.csv,.png,.jpg,.jpeg" required>
+          </label>
+          <div class="parser-mode-row">
+            <label for="parserModeSelect">Режим парсера</label>
+            <select id="parserModeSelect" name="parser_mode" aria-describedby="parserModeHint">
+              <option value="auto" selected>Авто (как в маршрутизаторе)</option>
+              <option value="yolo">YOLO + тяжёлый контур (явно)</option>
+              <option value="docling">Docling</option>
+            </select>
+            <p class="hint-inline" id="parserModeHint">
+              Для загрузки через сайт <strong>«Авто»</strong> и <strong>«YOLO»</strong> для PDF и изображений дают один и тот же маршрут HEAVY; разница заметна в основном при пакетном ingest по реестру.
+              <strong>Docling</strong> — отдельный парсер: на сложных PDF часто аккуратнее по структуре текста, чем YOLO+PyMuPDF, но обычно <strong>требует больше оперативной памяти</strong> и времени. Excel/TXT по-прежнему нативно.
+            </p>
+          </div>
+        </form>
+
+        <div id="chunkSearchWrap" style="display:none;">
+          <div class="search-wrap">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <input type="text" id="chunkSearchInput" placeholder="Поиск по содержимому чанков…" autocomplete="off">
+          </div>
+        </div>
+
+        <div id="loading">Обработка документа…</div>
+        <div id="results"></div>
+      </div>
+    </main>
+    </div>
+  </div>
+
+    <script>
+        const BADGE_TYPES = new Set(['header','table','list','paragraph','formula','other']);
+        function badgeClass(bt) {
+            const b = (bt || 'other').toLowerCase();
+            return BADGE_TYPES.has(b) ? b : 'other';
+        }
+
+        function escAttr(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+        }
+        function resolveChunkImageSrc(relPath, docId) {
+            if (!relPath || !docId) return relPath || '';
+            const p = String(relPath).trim();
+            if (p.startsWith('http://') || p.startsWith('https://') || p.startsWith('data:')) return p;
+            const clean = p.replace(/^\.\//, '');
+            if (!clean.startsWith('assets/')) return p;
+            const o = window.location.origin;
+            if (o && o !== 'null' && (o.startsWith('http') || o.startsWith('https')))
+                return '/ingested/' + encodeURIComponent(docId) + '/' + clean;
+            return p;
+        }
+        function markdownImgsToTags(html, docId) {
+            if (!docId || html == null) return html;
+            return String(html).replace(/!\[([^\]]*)\]\((assets\/[^)]+)\)/g, (_, alt, path) => {
+                const src = resolveChunkImageSrc(path.trim(), docId);
+                return '<img class="chunk-inline-img" src="' + escAttr(src) + '" alt="' + escAttr(alt) + '" loading="lazy"/>';
+            });
+        }
+
+        /** Если в чанке есть markdown-картинка, распознанный LaTeX в $$…$$ не показываем — только картинка и прочий текст. */
+        function stripDisplayMathWhenImage(text) {
+            if (!text || !/!\[[^\]]*\]\([^)]+\)/.test(text)) return text;
+            const segs = String(text).split('$$');
+            if (segs.length < 2) return text;
+            const kept = [];
+            for (let si = 0; si < segs.length; si++) {
+                if (si % 2 === 0) kept.push(segs[si]);
+            }
+            return kept.join('').replace(/\n{3,}/g, '\n\n').trim();
+        }
+
+        /** Продолжение длинной markdown-таблицы без префикса [Таблица] и без | в начале первой строки. */
+        function looksLikeMarkdownTableBlock(s) {
+            const t = String(s || '').trim();
+            if (!t) return false;
+            if (t.startsWith('|')) return true;
+            const lines = t.split('\n').map((l) => l.trim()).filter((l) => l.length);
+            if (lines.length < 2) return false;
+            const pipeRows = lines.filter((l) => l.startsWith('|') && l.endsWith('|')).length;
+            return pipeRows >= Math.max(2, Math.floor(lines.length * 0.5));
+        }
+
+        function normalizeMarkdownPipeTableLine(line) {
+            const s = String(line || '').trim();
+            if (!s.startsWith('|')) return s;
+            if (s.endsWith('|')) return s;
+            return s + '|';
+        }
+
+        function splitMdTableRowCells(line) {
+            const s = normalizeMarkdownPipeTableLine(String(line || '').trim());
+            if (!s.startsWith('|') || !s.endsWith('|')) return null;
+            return s.slice(1, -1).split('|').map((c) => c.trim());
+        }
+
+        function isMarkdownTableSeparatorLine(line) {
+            const cells = splitMdTableRowCells(line);
+            if (!cells || !cells.length) return false;
+            return cells.every((c) => {
+                const t = c.replace(/\s/g, '');
+                return /^:?-{2,}:?$/.test(t);
+            });
+        }
+
+        function escapeHtmlPlain(s) {
+            return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        /** Выравниваем число колонок под GFM (включая строку |---|), иначе marked не строит <table>. */
+        function padMarkdownPipeLines(pipeLines) {
+            const rows = [];
+            for (let li = 0; li < pipeLines.length; li++) {
+                const line = normalizeMarkdownPipeTableLine(pipeLines[li]);
+                if (isMarkdownTableSeparatorLine(line)) {
+                    const cells = splitMdTableRowCells(line);
+                    rows.push({ sep: true, cells: cells || [] });
+                } else {
+                    const cells = splitMdTableRowCells(line);
+                    if (cells) rows.push({ sep: false, cells });
+                }
+            }
+            let maxCols = 0;
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i];
+                if (r.sep && r.cells) maxCols = Math.max(maxCols, r.cells.length);
+                if (!r.sep && r.cells) maxCols = Math.max(maxCols, r.cells.length);
+            }
+            if (maxCols < 1) maxCols = 1;
+            const out = [];
+            for (let i = 0; i < rows.length; i++) {
+                const r = rows[i];
+                if (r.sep) {
+                    const c = (r.cells || []).slice();
+                    while (c.length < maxCols) c.push('---');
+                    if (c.length > maxCols) c.length = maxCols;
+                    out.push('|' + c.join('|') + '|');
+                    continue;
+                }
+                const c = r.cells.slice();
+                while (c.length < maxCols) c.push('');
+                if (c.length > maxCols) c.length = maxCols;
+                out.push('|' + c.join('|') + '|');
+            }
+            return out.join('\n');
+        }
+
+        let _markedGfmConfigured = false;
+        function ensureMarkedGfm() {
+            if (_markedGfmConfigured || typeof marked === 'undefined') return;
+            if (typeof marked.setOptions === 'function') {
+                marked.setOptions({ gfm: true, breaks: false });
+            }
+            _markedGfmConfigured = true;
+        }
+
+        function parseMarkdownToSafeHtml(md) {
+            ensureMarkedGfm();
+            let raw = '';
+            if (typeof marked !== 'undefined' && typeof marked.parse === 'function') {
+                raw = marked.parse(String(md || ''));
+            } else {
+                raw = '<pre class="md-fallback-pre">' + escapeHtmlPlain(md) + '</pre>';
+            }
+            if (typeof DOMPurify !== 'undefined' && typeof DOMPurify.sanitize === 'function') {
+                return DOMPurify.sanitize(String(raw), {
+                    ADD_ATTR: ['align', 'colspan', 'rowspan', 'scope'],
+                });
+            }
+            return String(raw);
+        }
+
+        /** Склеить строки |… без закрывающего | с продолжением на следующей строке. */
+        function repairSplitMarkdownTableRows(text) {
+            const lines = String(text || '').split('\n');
+            const out = [];
+            for (let li = 0; li < lines.length; li++) {
+                const line = lines[li];
+                const s = line.trim();
+                if (!s) {
+                    out.push(line);
+                    continue;
+                }
+                if (out.length) {
+                    const ps = out[out.length - 1].trimEnd();
+                    if (
+                        ps.startsWith('|') && !ps.endsWith('|') &&
+                        s.indexOf('|') >= 0 && !s.startsWith('#') &&
+                        !/^\[Таблица\]/i.test(s) && !s.startsWith('|')
+                    ) {
+                        out[out.length - 1] = ps + ' ' + s;
+                        continue;
+                    }
+                }
+                out.push(line);
+            }
+            return out.join('\n');
+        }
+
+        /** Рендер таблицы по правилам GFM (библиотека marked): выравнивание из строки | :--- | ---: |. */
+        function renderTableChunkMarkdownLib(text) {
+            let src = repairSplitMarkdownTableRows(String(text || '').replace(/<br\s*\/?>/gi, ' '));
+            const rawLines = src.split('\n');
+            const segments = [];
+            let ri = 0;
+            while (ri < rawLines.length) {
+                let line = rawLines[ri].trim();
+                if (!line) {
+                    ri++;
+                    continue;
+                }
+                const ln0 = normalizeMarkdownPipeTableLine(line);
+                if (ln0.startsWith('|') && ln0.endsWith('|')) {
+                    const pipeLines = [];
+                    while (ri < rawLines.length) {
+                        line = rawLines[ri].trim();
+                        if (!line) {
+                            ri++;
+                            continue;
+                        }
+                        const ln = normalizeMarkdownPipeTableLine(line);
+                        if (!(ln.startsWith('|') && ln.endsWith('|'))) break;
+                        pipeLines.push(ln);
+                        ri++;
+                    }
+                    if (pipeLines.length) segments.push({ kind: 'table', lines: pipeLines });
+                    continue;
+                }
+                const band = [];
+                while (ri < rawLines.length) {
+                    line = rawLines[ri].trim();
+                    if (!line) break;
+                    const lnb = normalizeMarkdownPipeTableLine(line);
+                    if (lnb.startsWith('|') && lnb.endsWith('|')) break;
+                    band.push(line);
+                    ri++;
+                }
+                if (band.length) segments.push({ kind: 'band', text: band.join('\n') });
+            }
+            let html = '<div class="md-table-wrap md-markdown-tables">';
+            for (let si = 0; si < segments.length; si++) {
+                const seg = segments[si];
+                if (seg.kind === 'band') {
+                    html += '<div class="md-table-band">' + escapeHtmlPlain(seg.text) + '</div>';
+                    continue;
+                }
+                html += parseMarkdownToSafeHtml(padMarkdownPipeLines(seg.lines));
+            }
+            html += '</div>';
+            return html;
+        }
+
+        /** Номер вроде (2.3), (2.1а) или в начале строки 2.3 / 2.3. — для заголовка раскрываемого блока формулы. */
+        function extractFormulaLabel(text) {
+            const t = String(text || '');
+            let m = t.match(/\(\s*(\d+\.\d+(?:[а-яА-ЯёЁa-z])?)\s*\)/);
+            if (m) return m[1].trim();
+            m = t.match(/(?:^|\n)\s*(\d{1,2}\.\d{1,3}[а-яА-ЯёЁa-z]?)\s*[.:\)\-]/);
+            if (m) return m[1].trim();
+            m = t.match(/\b(\d{1,2}\.\d{1,3}[а-яА-ЯёЁa-z]?)\b/);
+            return m ? m[1].trim() : '';
+        }
+
+        function isBibliographyTitle(s) {
+            const t = String(s || '').toLowerCase();
+            return /(список\s+(литературы|источников|использованных\s+источников)|библиографическ|литература)/i.test(t);
+        }
+
+        function looksLikeBibliographyItem(text) {
+            const t = String(text || '').trim();
+            if (!t) return false;
+            if (isBibliographyTitle(t)) return true;
+            const lines = t.split('\n').map((l) => l.trim()).filter(Boolean);
+            if (!lines.length) return false;
+            const refLines = lines.filter((l) =>
+                /^(\[?\d{1,3}\]?|\d{1,3}[.)])\s+/.test(l) ||
+                /^(ГОСТ|СП|СНиП|СанПиН|РД|МУК|Федеральн(ый|ого)\s+закон|Приказ|Постановление)\b/i.test(l)
+            ).length;
+            return refLines >= Math.max(1, Math.ceil(lines.length * 0.45));
+        }
+
+        function mergeUiChunks(base, next) {
+            const merged = Object.assign({}, base);
+            merged.text = [base.text, next.text].filter(Boolean).join('\n\n');
+            merged.page_end = Math.max(Number(base.page_end || base.page || 0), Number(next.page_end || next.page || 0)) || base.page_end || base.page;
+            merged.block_type = base.block_type === 'header' ? (next.block_type || 'list') : (base.block_type || next.block_type || 'list');
+            merged.structure_confidence = Math.min(
+                Number(base.structure_confidence == null ? 1 : base.structure_confidence),
+                Number(next.structure_confidence == null ? 1 : next.structure_confidence)
+            );
+            merged.needs_review = Boolean(base.needs_review || next.needs_review);
+            merged.is_truncated = Boolean(base.is_truncated || next.is_truncated);
+            merged.is_continuation = Boolean(base.is_continuation || next.is_continuation);
+            merged.entities = [].concat(base.entities || [], next.entities || []);
+            merged.ui_grouped = true;
+            merged.ui_group_count = Number(base.ui_group_count || 1) + 1;
+            merged.chunk_id = [base.chunk_id, next.chunk_id].filter(Boolean).join(' + ');
+            if (!merged.section_title && next.section_title) merged.section_title = next.section_title;
+            return merged;
+        }
+
+        function normalizeUiSectionTitle(s) {
+            return String(s || '').replace(/\s+/g, ' ').trim().toLowerCase();
+        }
+
+        function uiChunkNonMergeableType(bt) {
+            const b = String(bt || '').toLowerCase();
+            return b === 'table' || b === 'formula';
+        }
+
+        function sameUiDocIdForMerge(a, b) {
+            const da = a == null ? '' : String(a.doc_id || '').trim();
+            const db = b == null ? '' : String(b.doc_id || '').trim();
+            if (!da || !db) return true;
+            return da === db;
+        }
+
+        /** Номер пункта в начале строки: 49. 49) 49] … */
+        function extractEnumerationNumberFromLine(line) {
+            const s = String(line || '').trim();
+            if (!s) return null;
+            let m = s.match(/^(\d{1,4})([.)\\]])\s/);
+            if (m) return parseInt(m[1], 10);
+            m = s.match(/^(\d{1,4})\s*[\u2014\-\u2013]\s/);
+            if (m) return parseInt(m[1], 10);
+            return null;
+        }
+
+        function extractLastLeadingEnumerationNumber(text) {
+            const lines = String(text || '').split('\n');
+            for (let i = lines.length - 1; i >= 0; i--) {
+                const n = extractEnumerationNumberFromLine(lines[i]);
+                if (n != null) return n;
+            }
+            return null;
+        }
+
+        function extractFirstLeadingEnumerationNumber(text) {
+            const lines = String(text || '').split('\n');
+            for (let i = 0; i < lines.length; i++) {
+                const n = extractEnumerationNumberFromLine(lines[i]);
+                if (n != null) return n;
+            }
+            return null;
+        }
+
+        /** Сквозная нумерация: последний пункт в prev на единицу меньше первого в next. */
+        function continuesEnumerationAcrossChunks(prevText, nextText) {
+            const last = extractLastLeadingEnumerationNumber(prevText);
+            const first = extractFirstLeadingEnumerationNumber(nextText);
+            if (last == null || first == null) return false;
+            return first === last + 1;
+        }
+
+        function sectionTitlesMatchForUiMerge(a, b) {
+            const sa = normalizeUiSectionTitle(a && a.section_title);
+            const sb = normalizeUiSectionTitle(b && b.section_title);
+            return sa.length > 0 && sa === sb;
+        }
+
+        /** Цепочка 4 → 4.2 → 4.2.1 из начала section_title (после #). */
+        function extractOutlineNumsFromTitle(s) {
+            const raw = String(s || '').replace(/^#+\s*/, '').trim();
+            const m = raw.match(/^(\d+(?:\.\d+)*)\.?\s/) || raw.match(/^(\d+(?:\.\d+)*)\b/);
+            if (!m) return null;
+            const parts = m[1].split('.');
+            const out = [];
+            for (let i = 0; i < parts.length; i++) {
+                const n = parseInt(parts[i], 10);
+                if (Number.isNaN(n)) return null;
+                out.push(n);
+            }
+            return out.length ? out : null;
+        }
+
+        /** Одинаковый или вложенный нумерованный заголовок (4.2 и 4.2.1). */
+        function outlineTitlesCompatible(prev, next) {
+            if (sectionTitlesMatchForUiMerge(prev, next)) return true;
+            const A = extractOutlineNumsFromTitle(prev && prev.section_title);
+            const B = extractOutlineNumsFromTitle(next && next.section_title);
+            if (!A || !B || !A.length || !B.length) return false;
+            const m = Math.min(A.length, B.length);
+            for (let i = 0; i < m; i++) {
+                if (A[i] !== B[i]) return false;
+            }
+            return true;
+        }
+
+        function sameChunkStartPage(a, b) {
+            return Number(a.page || 0) === Number(b.page || 0);
+        }
+
+        /** Буллеты/маркеры в начале строки (ненумерованный список; не 1. / 5.1.). */
+        function lineLooksLikeBulletItem(line) {
+            const l = String(line || '').trim();
+            if (!l) return false;
+            if (/^\d+(?:\.\d+)*[.)]?\s+/.test(l)) return false;
+            return /^[*•\-]\s+\S/.test(l) || /^[•●○◦]/.test(l);
+        }
+
+        function chunkBodyLooksLikeBulletList(text) {
+            const lines = String(text || '').split('\n').map((x) => x.trim()).filter(Boolean);
+            if (lines.length < 2) return false;
+            const hits = lines.filter(lineLooksLikeBulletItem).length;
+            return hits >= Math.max(2, Math.ceil(lines.length * 0.5));
+        }
+
+        function chunkIsBulletListNature(c) {
+            const t = String(c.block_type || '').toLowerCase();
+            if (t === 'list') return true;
+            return chunkBodyLooksLikeBulletList(String(c.text || ''));
+        }
+
+        /** Один раздел + нумерация/заголовки; списки с маркерами только на одной странице (на разных — отдельные блоки). */
+        function canMergeAdjacentUiChunks(prev, next) {
+            if (!prev || !next) return false;
+            if (!sameUiDocIdForMerge(prev, next)) return false;
+            const pt = String(prev.block_type || '').toLowerCase();
+            const nt = String(next.block_type || '').toLowerCase();
+            if (uiChunkNonMergeableType(pt) || uiChunkNonMergeableType(nt)) return false;
+
+            const titlesOk = sectionTitlesMatchForUiMerge(prev, next) || outlineTitlesCompatible(prev, next);
+            if (!titlesOk) return false;
+
+            const cont = Boolean(next.is_continuation);
+            const enumBridge = continuesEnumerationAcrossChunks(String(prev.text || ''), String(next.text || ''));
+            if (cont || enumBridge) return true;
+
+            const samePage = sameChunkStartPage(prev, next);
+            const prevBul = chunkIsBulletListNature(prev);
+            const nextBul = chunkIsBulletListNature(next);
+
+            if (prevBul && nextBul) return samePage;
+            if (prevBul || nextBul) return samePage;
+
+            return true;
+        }
+
+        function mergeAdjacentSectionUiChunks(arr) {
+            if (!arr || arr.length < 2) return arr || [];
+            const out = [Object.assign({}, arr[0])];
+            for (let i = 1; i < arr.length; i++) {
+                const c = Object.assign({}, arr[i]);
+                const prev = out[out.length - 1];
+                if (prev.ui_group_kind === 'bibliography' || c.ui_group_kind === 'bibliography') {
+                    out.push(c);
+                    continue;
+                }
+                if (canMergeAdjacentUiChunks(prev, c)) {
+                    const merged = mergeUiChunks(prev, c);
+                    merged.ui_group_kind = 'section_continue';
+                    out[out.length - 1] = merged;
+                } else {
+                    out.push(c);
+                }
+            }
+            return out;
+        }
+
+        function groupSemanticUiChunks(chunks) {
+            const out = [];
+            let bibliographyOpen = false;
+            for (const chunk of chunks || []) {
+                const c = Object.assign({}, chunk);
+                const btype = String(c.block_type || '').toLowerCase();
+                const text = String(c.text || '');
+                const section = String(c.section_title || '');
+                const startsBibliography = isBibliographyTitle(section) || isBibliographyTitle(text);
+                const isBibliography = startsBibliography || (bibliographyOpen && looksLikeBibliographyItem(text));
+
+                if (startsBibliography) bibliographyOpen = true;
+                if (bibliographyOpen && btype === 'header' && !startsBibliography && out.length) {
+                    bibliographyOpen = false;
+                }
+
+                if (
+                    isBibliography &&
+                    out.length &&
+                    !['table', 'formula'].includes(btype) &&
+                    !['table', 'formula'].includes(String(out[out.length - 1].block_type || '').toLowerCase()) &&
+                    (
+                        out[out.length - 1].ui_group_kind === 'bibliography' ||
+                        isBibliographyTitle(out[out.length - 1].section_title) ||
+                        isBibliographyTitle(out[out.length - 1].text)
+                    )
+                ) {
+                    const merged = mergeUiChunks(out[out.length - 1], c);
+                    merged.ui_group_kind = 'bibliography';
+                    merged.block_type = 'list';
+                    out[out.length - 1] = merged;
+                    continue;
+                }
+
+                if (isBibliography) {
+                    c.ui_group_kind = 'bibliography';
+                    if (btype !== 'header') c.block_type = 'list';
+                }
+                out.push(c);
+            }
+            return mergeAdjacentSectionUiChunks(out);
+        }
+
+        let lastChunkPayload = null;
+
+        function renderChunksData(data, opts) {
+            opts = opts || {};
+            lastChunkPayload = data;
+            const rawChunks = groupSemanticUiChunks(data.chunks || []);
+            const searchEl = document.getElementById('chunkSearchInput');
+            const q = (opts.searchOverride !== undefined)
+                ? String(opts.searchOverride).trim().toLowerCase()
+                : (searchEl ? searchEl.value.trim().toLowerCase() : '');
+            const chunksList = !q ? rawChunks : rawChunks.filter((c) =>
+                String(c.text || '').toLowerCase().includes(q) ||
+                String(c.section_title || '').toLowerCase().includes(q));
+
+            document.getElementById('statRoute').textContent = data.route || data.source_id || '—';
+            const statChunks = document.getElementById('statChunks');
+            if (q && rawChunks.length) statChunks.textContent = chunksList.length + ' / ' + rawChunks.length;
+            else statChunks.textContent = String(rawChunks.length);
+            document.getElementById('chunkSearchWrap').style.display = rawChunks.length ? 'block' : 'none';
+
+            const routeHtml = data.route
+                ? `<span class="route-pill">${String(data.route).toUpperCase()}</span>`
+                : `<span class="route-pill">${data.source_id}</span>`;
+            let html = `<h2 class="result-title">Документ загружен ${routeHtml}</h2>`;
+
+            if (!rawChunks.length) {
+                html += `<p class="empty-note">Не удалось извлечь текст или документ пуст.</p>`;
+            } else if (!chunksList.length) {
+                html += `<p class="empty-note">Нет чанков по запросу поиска.</p>`;
+            } else {
+                chunksList.forEach((c, i) => {
+                    const isFormula = (c.block_type || '').toLowerCase() === 'formula';
+                    const title = c.ui_group_kind === 'bibliography'
+                        ? 'Список литературы'
+                        : (c.section_title ? c.section_title : `Блок ${i+1}`);
+                    const bt = badgeClass(c.block_type);
+                    const typeBadge = c.block_type
+                        ? `<span class="badge ${bt}">${String(c.block_type).toUpperCase()}</span>`
+                        : '';
+                    const pageEnd = Number(c.page_end || c.page || 0);
+                    const page = c.page
+                        ? (pageEnd && pageEnd !== Number(c.page) ? `стр. ${c.page}-${pageEnd}` : `стр. ${c.page}`)
+                        : '';
+                    const q = [];
+                    if (c.structure_confidence != null && c.structure_confidence !== undefined) {
+                        q.push('уверенность ' + Math.round(Number(c.structure_confidence) * 100) + '%');
+                    }
+                    if (c.needs_review) q.push('needs_review');
+                    if (c.is_truncated) q.push('truncated');
+                    if (c.is_continuation) q.push('continuation');
+                    const qualityMeta = q.length ? `<span class="quality-meta">${q.join(' · ')}</span>` : '';
+
+                    let text = c.text.replace(/^\[Таблица\]\n/i, '').trim();
+                    if (isFormula) text = stripDisplayMathWhenImage(text);
+                    let htmlContent = '';
+
+                    if (c.block_type === 'table' || text.startsWith('|') || looksLikeMarkdownTableBlock(text)) {
+                        htmlContent = renderTableChunkMarkdownLib(text);
+                    } else {
+                        htmlContent = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                        let parts = htmlContent.split('$$');
+                        for (let j = 0; j < parts.length; j++) {
+                            if (j % 2 === 1) {
+                                parts[j] = `<div class="formula-plain">${parts[j].trim()}</div>`;
+                            } else {
+                                parts[j] = parts[j].replace(/\n/g, '<br>');
+                            }
+                        }
+
+                        if (c.formula_vars) {
+                            htmlContent = parts.join('') + `<div class="formula-vars-box">${c.formula_vars.replace(/\n/g, '<br>')}</div>`;
+                        } else {
+                            htmlContent = parts.join('');
+                        }
+
+                        if (c.entities && c.entities.length > 0) {
+                            htmlContent += `<div class="entities-box"><div class="entities-label">Сущности</div>`;
+                            c.entities.forEach(ent => {
+                                const t = (ent.type || '').replace(/[^a-z0-9_-]/gi, '');
+                                htmlContent += `<span class="entity-tag ${t}">${ent.value} <span class="etype">(${ent.type})</span></span>`;
+                            });
+                            htmlContent += `</div>`;
+                        }
+                    }
+
+                    const btype = (c.block_type || 'other').toLowerCase();
+                    const blockMod = btype === 'formula' ? ' block-type-formula' : '';
+                    const docId = data.source_id || c.doc_id || '';
+                    htmlContent = markdownImgsToTags(htmlContent, docId);
+
+                    if (isFormula) {
+                        const fnum = extractFormulaLabel(text);
+                        const sumTitle = fnum ? ('Формула (' + fnum.replace(/</g,'') + ')') : 'Формула';
+                        html += `
+                    <details class="chunk block-type-formula">
+                        <summary>
+                          ${typeBadge}
+                          <span class="sum-title">${sumTitle}</span>
+                          ${qualityMeta}
+                          <span class="sum-meta">${page}</span>
+                        </summary>
+                        <div class="content">${htmlContent}</div>
+                    </details>
+                    `;
+                    } else {
+                        html += `
+                    <details class="chunk block-type-${btype}${blockMod}">
+                        <summary>
+                          ${typeBadge}
+                          <span class="sum-title">${markdownImgsToTags(String(title).replace(/</g,'&lt;').replace(/>/g,'&gt;'), docId)}</span>
+                          ${qualityMeta}
+                          <span class="sum-meta">${page}</span>
+                        </summary>
+                        <div class="content">${htmlContent}</div>
+                    </details>
+                    `;
+                    }
+                });
+            }
+            document.getElementById('results').innerHTML = html;
+        }
+
+        /** Читает тело ответа как текст и парсит JSON — без сырого «Unexpected end of JSON input». */
+        async function readJsonOrThrow(response) {
+            const status = response.status;
+            const text = await response.text();
+            const trimmed = (text || '').trim();
+            if (!trimmed) {
+                if (status === 504 || status === 502 || status === 503) {
+                    throw new Error(
+                        'Сервер или шлюз не дождались ответа (таймаут). Обработка могла продолжиться на сервере — откройте документ в списке «Документы» слева.'
+                    );
+                }
+                throw new Error(
+                    'Пустой ответ сервера (код ' +
+                        status +
+                        '). Часто так бывает при долгой обработке или обрыве связи. Подождите и проверьте список «Документы» — документ мог уже сохраниться.'
+                );
+            }
+            try {
+                return JSON.parse(trimmed);
+            } catch (parseErr) {
+                throw new Error(
+                    'Ответ сервера не похож на JSON (код ' +
+                        status +
+                        '). Попробуйте обновить страницу или открыть документ из списка «Документы».'
+                );
+            }
+        }
+
+        function friendlyNetworkError(err) {
+            const m = err && err.message ? String(err.message) : 'Неизвестная ошибка';
+            if (/Failed to fetch|NetworkError|Load failed|network/i.test(m)) {
+                return 'Нет связи с сервером. Проверьте, что API запущен, и обновите страницу.';
+            }
+            if (/Unexpected end of JSON|end of JSON input|JSON Parse error/i.test(m)) {
+                return 'Сервер вернул неполный ответ. При долгой обработке откройте документ в списке «Документы» слева.';
+            }
+            return m;
+        }
+
+        function setLoadingUi(active, pct) {
+            const ld = document.getElementById('loading');
+            const pw = document.getElementById('progressWrap');
+            const pf = document.getElementById('progressFill');
+            const pp = document.getElementById('progressPct');
+            const st = document.getElementById('fileStatus');
+            if (active) {
+                ld.classList.add('visible');
+                pw.classList.add('visible');
+                const p = Math.min(100, Math.max(0, Math.floor(Number(pct) || 0)));
+                if (pf) pf.style.width = p + '%';
+                if (pp) pp.textContent = p + '%';
+                if (st) st.textContent = 'Обработка…';
+            } else {
+                ld.classList.remove('visible');
+                pw.classList.remove('visible');
+                if (pf) pf.style.width = '0%';
+                if (pp) pp.textContent = '0%';
+                if (st) st.textContent = document.getElementById('fileInput').files.length ? 'Готово' : 'Выберите файл в области ниже';
+            }
+        }
+
+        document.getElementById('fileInput').addEventListener('change', (ev) => {
+            const f = ev.target.files && ev.target.files[0];
+            const row = document.getElementById('fileRow');
+            const btn = document.getElementById('btnRecognize');
+            if (f) {
+                row.classList.add('visible');
+                document.getElementById('fileNameDisplay').textContent = f.name;
+                document.getElementById('fileStatus').textContent = 'Готов к распознаванию';
+                btn.disabled = false;
+            } else {
+                row.classList.remove('visible');
+                document.getElementById('fileNameDisplay').textContent = '—';
+                document.getElementById('fileStatus').textContent = 'Выберите файл в области ниже';
+                btn.disabled = true;
+            }
+        });
+
+        document.getElementById('btnResetForm').addEventListener('click', () => {
+            document.getElementById('fileInput').value = '';
+            document.getElementById('fileInput').dispatchEvent(new Event('change'));
+            const pm = document.getElementById('parserModeSelect');
+            if (pm) pm.value = 'auto';
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('chunkSearchWrap').style.display = 'none';
+            document.getElementById('statChunks').textContent = '0';
+            document.getElementById('statRoute').textContent = '—';
+            lastChunkPayload = null;
+        });
+
+        document.getElementById('exportJsonBtn').addEventListener('click', () => {
+            if (!lastChunkPayload || !lastChunkPayload.chunks) {
+                alert('Сначала распознайте документ или откройте его из базы.');
+                return;
+            }
+            const blob = new Blob([JSON.stringify(lastChunkPayload, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = (lastChunkPayload.source_id || 'chunks') + '.json';
+            a.click();
+            URL.revokeObjectURL(a.href);
+        });
+
+        document.getElementById('chunkSearchInput').addEventListener('input', () => {
+            if (lastChunkPayload) renderChunksData(lastChunkPayload);
+        });
+
+        document.getElementById('uploadForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files.length) return;
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            const pm = document.getElementById('parserModeSelect');
+            formData.append('parser_mode', pm ? pm.value : 'auto');
+
+            document.getElementById('results').innerHTML = '';
+            let prog = 0;
+            setLoadingUi(true, 0);
+            let tick = setInterval(() => {
+                prog = Math.min(prog + 7, 92);
+                setLoadingUi(true, prog);
+            }, 220);
+
+            try {
+                const res = await fetch('/extract', { method: 'POST', body: formData });
+                const data = await readJsonOrThrow(res);
+                if (!res.ok) {
+                    const d = data && data.detail;
+                    let msg = 'Ошибка сервера';
+                    if (typeof d === 'string') msg = d;
+                    else if (Array.isArray(d) && d.length)
+                        msg = d.map((x) => (x && (x.msg || x.message)) || JSON.stringify(x)).join(' ');
+                    throw new Error(msg);
+                }
+                clearInterval(tick);
+                tick = null;
+                setLoadingUi(true, 100);
+                renderChunksData(data);
+            } catch (err) {
+                document.getElementById('results').innerHTML =
+                    `<div class="msg-error">Ошибка: ${escapeHtmlPlain(friendlyNetworkError(err))}</div>`;
+            } finally {
+                if (tick) clearInterval(tick);
+                setLoadingUi(false, 0);
+            }
+        };
+
+        document.getElementById('loadDocsBtn').onclick = async () => {
+            const listDiv = document.getElementById('docList');
+            listDiv.innerHTML = '<span class="empty-note">Загрузка списка…</span>';
+            try {
+                const res = await fetch('/documents');
+                const data = await readJsonOrThrow(res);
+                if (!res.ok) {
+                    const d = data && data.detail;
+                    throw new Error(typeof d === 'string' ? d : 'Не удалось загрузить список документов');
+                }
+                listDiv.innerHTML = '';
+
+                const docs = data.documents || [];
+                if (docs.length === 0) {
+                    listDiv.innerHTML = '<span class="empty-note">База пуста.</span>';
+                    return;
+                }
+
+                docs.forEach(docId => {
+                    const btn = document.createElement('button');
+                    btn.textContent = docId;
+                    btn.type = 'button';
+                    btn.className = 'btn btn-chip' + (docId.startsWith('API-') ? ' api' : '');
+                    btn.onclick = async () => {
+                        document.getElementById('results').innerHTML = '';
+                        setLoadingUi(true, 30);
+                        try {
+                            const docRes = await fetch(`/documents/${docId}`);
+                            const docData = await readJsonOrThrow(docRes);
+                            if (!docRes.ok) {
+                                const d = docData && docData.detail;
+                                throw new Error(typeof d === 'string' ? d : 'Ошибка загрузки');
+                            }
+                            if (!docData.source_id) docData.source_id = docId;
+                            renderChunksData(docData);
+                        } catch (err) {
+                            document.getElementById('results').innerHTML =
+                                `<div class="msg-error">Ошибка: ${escapeHtmlPlain(friendlyNetworkError(err))}</div>`;
+                        } finally {
+                            setLoadingUi(false, 0);
+                        }
+                    };
+                    listDiv.appendChild(btn);
+                });
+            } catch (e) {
+                listDiv.innerHTML = `<div class="msg-error">Ошибка: ${escapeHtmlPlain(friendlyNetworkError(e))}</div>`;
+            }
+        };
+
+        document.getElementById('cleanupBtn').onclick = async () => {
+            if (!confirm('Удалить все ранее загруженные тестовые документы (API-...) из базы?')) return;
+            try {
+                const res = await fetch('/cleanup', { method: 'DELETE' });
+                const data = await readJsonOrThrow(res);
+                if (!res.ok) {
+                    const d = data && data.detail;
+                    throw new Error(typeof d === 'string' ? d : 'Ошибка очистки');
+                }
+                alert(`База очищена. Удалено объектов: ${data.deleted_items}`);
+                document.getElementById('results').innerHTML = '';
+                document.getElementById('docList').innerHTML = '';
+                document.getElementById('statChunks').textContent = '0';
+                document.getElementById('statRoute').textContent = '—';
+                lastChunkPayload = null;
+            } catch (e) {
+                alert('Ошибка при очистке: ' + friendlyNetworkError(e));
+            }
+        };
+    </script>
+</body>
+</html>
