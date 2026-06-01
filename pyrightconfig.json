@@ -1,9 +1,18 @@
 {
+  "include": ["api", "scripts"],
   "venvPath": ".",
   "venv": ".venv",
   "extraPaths": ["."],
   "pythonVersion": "3.11",
+  "pythonPlatform": "Windows",
   "typeCheckingMode": "basic",
   "reportMissingImports": "warning",
-  "reportMissingModuleSource": "warning"
+  "reportMissingModuleSource": "warning",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "pythonVersion": "3.11",
+      "extraPaths": ["."]
+    }
+  ]
 }

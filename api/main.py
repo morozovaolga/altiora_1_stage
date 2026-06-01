@@ -106,7 +106,8 @@ def extract_document(
     upload_dir.mkdir(parents=True, exist_ok=True)
     
     # Используем безопасное имя файла (LibreOffice путается из-за точек в названиях типа 16.11.2021)
-    safe_ext = Path(file.filename).suffix.lower()
+    upload_name = file.filename or "document"
+    safe_ext = Path(upload_name).suffix.lower()
     file_path = upload_dir / f"document{safe_ext}"
     
     with open(file_path, "wb") as buffer:
@@ -119,7 +120,7 @@ def extract_document(
             file_path=file_path,
             upload_dir=upload_dir,
             parser_mode=parser_mode,
-            filename=file.filename,
+            filename=upload_name,
             get_yolo_extractor=get_yolo_extractor,
         )
         background_tasks.add_task(cleanup_source, source_id)
